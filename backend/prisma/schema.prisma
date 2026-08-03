@@ -1,0 +1,66 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Represents a single scanning job for a website
+model Scan {
+  id            String   @id @default(uuid())
+  url           String
+  status        String   @default("pending") // pending | crawling | capturing | completed | failed
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+  pageCount     Int      @default(0)
+  pagesTotal    Int      @default(0)
+  deviceTypes   String   @default("desktop") // comma-separated: desktop,mobile,tablet,laptop
+  format        String   @default("png")     // png | jpeg | webp
+  quality       Int      @default(90)
+  maxPages      Int      @default(50)
+  maxDepth      Int      @default(3)
+  errorMessage  String?
+  zipPath       String?
+
+  pages         Page[]
+  logs          ScanLog[]
+}
+
+/// Represents a single page discovered and/or captured during a scan
+model Page {
+  id             String   @id @default(uuid())
+  scanId         String
+  url            String
+  path           String   // URL path, e.g., /about
+  title          String?
+  status         String   @default("pending") // pending | capturing | completed | failed
+  screenshotPath String?
+  thumbnailPath  String?
+  fileSize       Int?
+  deviceType     String   @default("desktop")
+  viewportWidth  Int      @default(1920)
+  viewportHeight Int      @default(1080)
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  scan           Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+}
+
+/// Logs for tracking scan events
+model ScanLog {
+  id        String   @id @default(uuid())
+  scanId    String
+  level     String   @default("info") // info | warn | error
+  message   String
+  timestamp DateTime @default(now())
+
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+}
