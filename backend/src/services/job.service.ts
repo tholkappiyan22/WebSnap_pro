@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { PrismaClient } from '@prisma/client';
 import { crawlWebsite, CrawlOptions, DiscoveredPage } from './crawler.service';
-import { capturePage, CaptureOptions, VIEWPORTS, closeBrowser } from './screenshot.service';
+import { capturePage, CaptureOptions, VIEWPORTS } from './screenshot.service';
 import { createZipArchive, ZipEntry } from './zip.service';
 import { generateScreenshotFilename } from '../utils/filename';
 import { getDomain } from '../utils/url';
@@ -23,6 +23,56 @@ export interface ProgressUpdate {
 }
 
 /**
+ * Runs up to `concurrency` async tasks at once using a semaphore pool.
+ * Unlike chunked batching, idle workers immediately pick up the next task.
+ */
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const taskIndex = index++;
+      if (taskIndex >= tasks.length) break;
+      results[taskIndex] = await tasks[taskIndex]();
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Attempts a capture with up to `maxRetries` retries on transient failures.
+ */
+async function captureWithRetry(
+  url: string,
+  outputDir: string,
+  filename: string,
+  options: CaptureOptions,
+  maxRetries = 1
+): Promise<Awaited<ReturnType<typeof capturePage>>> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await capturePage(url, outputDir, filename, options);
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        console.warn(`  ↩ Retrying (${attempt + 1}/${maxRetries}): ${url} — ${err.message}`);
+        // Brief pause before retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
  * In-memory job manager with event-based progress tracking.
  * Manages the lifecycle of scan jobs: crawl → capture → zip.
  */
@@ -33,7 +83,8 @@ class JobService extends EventEmitter {
   constructor() {
     super();
     this.setMaxListeners(100); // Allow many SSE listeners
-    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || '3', 10);
+    // Increased default from 3→5 for faster throughput
+    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || '5', 10);
   }
 
   /**
@@ -68,7 +119,7 @@ class JobService extends EventEmitter {
       const crawlOptions: CrawlOptions = {
         maxPages: scan.maxPages,
         maxDepth: scan.maxDepth,
-        timeout: 15000,
+        timeout: 12000, // Reduced from 15000ms for faster crawl
       };
 
       let pagesDiscoveredCount = 0;
@@ -137,7 +188,7 @@ class JobService extends EventEmitter {
         pagesTotal: totalCaptures,
       });
 
-      await this.log(scanId, 'info', `Starting screenshot capture: ${totalCaptures} total`);
+      await this.log(scanId, 'info', `Starting screenshot capture: ${totalCaptures} total (concurrency: ${this.maxConcurrent})`);
 
       const pendingPages = await prisma.page.findMany({
         where: { scanId, status: 'pending' },
@@ -147,103 +198,101 @@ class JobService extends EventEmitter {
       const startTime = Date.now();
       const zipEntries: ZipEntry[] = [];
 
-      // Process captures in batches for concurrency control
-      const batches = chunkArray(pendingPages, this.maxConcurrent);
+      // Build task list for the concurrency pool
+      const captureTasks = pendingPages.map((pageRecord) => async () => {
+        if (jobState.aborted) return;
 
-      for (const batch of batches) {
-        if (jobState.aborted) break;
+        try {
+          await prisma.page.update({
+            where: { id: pageRecord.id },
+            data: { status: 'capturing' },
+          });
 
-        const capturePromises = batch.map(async (pageRecord) => {
-          if (jobState.aborted) return;
+          const filename = generateScreenshotFilename(
+            pageRecord.path,
+            pageRecord.deviceType,
+            scan.format
+          );
 
-          try {
-            await prisma.page.update({
-              where: { id: pageRecord.id },
-              data: { status: 'capturing' },
-            });
+          const captureOptions: CaptureOptions = {
+            format: scan.format as 'png' | 'jpeg' | 'webp',
+            quality: scan.quality,
+            // Use 25s Playwright timeout — gives buffer for slow pages
+            timeout: parseInt(process.env.DEFAULT_CAPTURE_TIMEOUT || '25000', 10),
+            // Default pre-delay to 0 for speed; user can override via env
+            preDelay: parseInt(process.env.DEFAULT_PRE_CAPTURE_DELAY || '0', 10),
+            deviceType: pageRecord.deviceType,
+          };
 
-            const filename = generateScreenshotFilename(
-              pageRecord.path,
-              pageRecord.deviceType,
-              scan.format
-            );
+          // Capture with 1 automatic retry on transient failures
+          const result = await captureWithRetry(
+            pageRecord.url,
+            screenshotsDir,
+            filename,
+            captureOptions,
+            1
+          );
 
-            const captureOptions: CaptureOptions = {
-              format: scan.format as 'png' | 'jpeg' | 'webp',
-              quality: scan.quality,
-              timeout: parseInt(process.env.DEFAULT_CAPTURE_TIMEOUT || '30000', 10),
-              preDelay: parseInt(process.env.DEFAULT_PRE_CAPTURE_DELAY || '1000', 10),
-              deviceType: pageRecord.deviceType,
-            };
+          await prisma.page.update({
+            where: { id: pageRecord.id },
+            data: {
+              status: 'completed',
+              screenshotPath: result.screenshotPath,
+              thumbnailPath: result.thumbnailPath,
+              fileSize: result.fileSize,
+              title: result.title || pageRecord.title,
+            },
+          });
 
-            const result = await capturePage(
-              pageRecord.url,
-              screenshotsDir,
-              filename,
-              captureOptions
-            );
+          zipEntries.push({
+            filePath: result.screenshotPath,
+            urlPath: pageRecord.path,
+            deviceType: pageRecord.deviceType,
+            format: scan.format,
+          });
 
-            await prisma.page.update({
-              where: { id: pageRecord.id },
-              data: {
-                status: 'completed',
-                screenshotPath: result.screenshotPath,
-                thumbnailPath: result.thumbnailPath,
-                fileSize: result.fileSize,
-                title: result.title || pageRecord.title,
-              },
-            });
-
-            zipEntries.push({
-              filePath: result.screenshotPath,
-              urlPath: pageRecord.path,
-              deviceType: pageRecord.deviceType,
-              format: scan.format,
-            });
-
-            if (result.additionalParts && result.additionalParts.length > 0) {
-              for (let i = 0; i < result.additionalParts.length; i++) {
-                zipEntries.push({
-                  filePath: result.additionalParts[i],
-                  urlPath: `${pageRecord.path}-part${i + 2}`,
-                  deviceType: pageRecord.deviceType,
-                  format: scan.format,
-                });
-              }
+          if (result.additionalParts && result.additionalParts.length > 0) {
+            for (let i = 0; i < result.additionalParts.length; i++) {
+              zipEntries.push({
+                filePath: result.additionalParts[i],
+                urlPath: `${pageRecord.path}-part${i + 2}`,
+                deviceType: pageRecord.deviceType,
+                format: scan.format,
+              });
             }
-
-            completed++;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const avgTime = elapsed / completed;
-            const remaining = Math.round(avgTime * (totalCaptures - completed));
-
-            this.emitProgress(scanId, {
-              scanId,
-              status: 'capturing',
-              pagesDiscovered: crawlResult.pages.length,
-              pagesCompleted: completed,
-              pagesTotal: totalCaptures,
-              currentPage: pageRecord.url,
-              estimatedTimeRemaining: remaining,
-            });
-          } catch (error: any) {
-            console.error(`Screenshot failed: ${pageRecord.url}`, error.message);
-
-            await prisma.page.update({
-              where: { id: pageRecord.id },
-              data: {
-                status: 'failed',
-                errorMessage: error.message || 'Screenshot capture failed',
-              },
-            });
-
-            await this.log(scanId, 'error', `Failed: ${pageRecord.url} — ${error.message}`);
-            completed++;
           }
-        });
+        } catch (error: any) {
+          console.error(`Screenshot failed: ${pageRecord.url}`, error.message);
 
-        await Promise.all(capturePromises);
-      }
+          await prisma.page.update({
+            where: { id: pageRecord.id },
+            data: {
+              status: 'failed',
+              errorMessage: error.message || 'Screenshot capture failed',
+            },
+          });
+
+          await this.log(scanId, 'error', `Failed: ${pageRecord.url} — ${error.message}`);
+        } finally {
+          completed++;
+          const elapsed = (Date.now() - startTime) / 1000;
+          const avgTime = elapsed / completed;
+          const remaining = Math.round(avgTime * (totalCaptures - completed));
+
+          this.emitProgress(scanId, {
+            scanId,
+            status: 'capturing',
+            pagesDiscovered: crawlResult.pages.length,
+            pagesCompleted: completed,
+            pagesTotal: totalCaptures,
+            currentPage: pageRecord.url,
+            estimatedTimeRemaining: remaining,
+          });
+        }
+      });
+
+      // Run all captures through the concurrency pool (idle workers pick up immediately)
+      await runWithConcurrency(captureTasks, this.maxConcurrent);
 
       if (jobState.aborted) return;
 
@@ -301,8 +350,8 @@ class JobService extends EventEmitter {
       });
     } finally {
       this.activeJobs.delete(scanId);
-      // Close browser to free resources
-      await closeBrowser();
+      // NOTE: Browser is intentionally kept alive between scans for warm reuse.
+      // Chromium cold start costs ~2-3s; reusing saves significant time across multiple scans.
     }
   }
 
@@ -337,17 +386,6 @@ class JobService extends EventEmitter {
       console.error(`Failed to write log for scan ${scanId}: ${message}`);
     }
   }
-}
-
-/**
- * Splits an array into chunks of a given size.
- */
-function chunkArray<T>(array: T[], chunkSize: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += chunkSize) {
-    chunks.push(array.slice(i, i + chunkSize));
-  }
-  return chunks;
 }
 
 // Singleton instance

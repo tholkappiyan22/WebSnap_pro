@@ -120,9 +120,9 @@ export async function capturePage(
       timeout: options.timeout || 30000,
     });
 
-    // Wait for network idle (max 3s)
+    // Wait for network idle (max 2s)
     try {
-      await page.waitForLoadState('networkidle', { timeout: 3000 });
+      await page.waitForLoadState('networkidle', { timeout: 2000 });
     } catch { /* ignore */ }
 
     // Wait for content (max 3s)
@@ -135,9 +135,9 @@ export async function capturePage(
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(300);
 
-    // Optional pre-capture delay
+    // Optional pre-capture delay (capped at 2s)
     if (options.preDelay > 0) {
-      await page.waitForTimeout(Math.min(options.preDelay, 3000));
+      await page.waitForTimeout(Math.min(options.preDelay, 2000));
     }
 
     // Get page title
@@ -177,32 +177,41 @@ export async function capturePage(
       };
     }
 
-    // --- Page exceeds 5 screens height: Split into 5-screen parts ---
-    const segmentCount = Math.ceil(totalScrollHeight / maxSegmentHeight);
-    console.log(`📏 Tall page detected (${totalScrollHeight}px). Splitting into ${segmentCount} parts (5 screens each)...`);
+    // --- Page exceeds 5 screens height: Capture full page then slice with Sharp ---
+    // NOTE: Playwright's `clip` only works within the rendered viewport bounds.
+    // For tall pages, yOffset > viewport.height causes "Clipped area is outside image".
+    // Solution: capture the entire page as one PNG buffer, then use Sharp to extract slices.
+    console.log(`📏 Tall page detected (${totalScrollHeight}px). Splitting into ${Math.ceil(totalScrollHeight / maxSegmentHeight)} parts (5 screens each)...`);
+
+    // Always capture as PNG for the intermediate full-page buffer (Sharp will convert after)
+    const fullPageBuffer = await page.screenshot({ fullPage: true, type: 'png' });
+
+    // Get actual rendered dimensions from the buffer (more reliable than scrollHeight)
+    const fullMeta = await sharp(Buffer.from(fullPageBuffer)).metadata();
+    const actualWidth = fullMeta.width || viewport.width;
+    const actualHeight = fullMeta.height || totalScrollHeight;
+
+    // Recalculate segments based on the actual captured image height
+    const actualSegmentCount = Math.ceil(actualHeight / maxSegmentHeight);
 
     const additionalParts: string[] = [];
     let primaryScreenshotPath = '';
     let primaryThumbnailPath = '';
     let primaryFileSize = 0;
 
-    for (let i = 0; i < segmentCount; i++) {
-      const yOffset = i * maxSegmentHeight;
-      const segmentHeight = Math.min(maxSegmentHeight, totalScrollHeight - yOffset);
+    for (let i = 0; i < actualSegmentCount; i++) {
+      const top = i * maxSegmentHeight;
+      const height = Math.min(maxSegmentHeight, actualHeight - top);
       const partFilename = filename.replace(/(\.\w+)$/, `-part${i + 1}$1`);
       const partPath = path.join(outputDir, partFilename);
 
-      const segmentBuffer = await page.screenshot({
-        clip: {
-          x: 0,
-          y: yOffset,
-          width: viewport.width,
-          height: segmentHeight,
-        },
-        type: options.format === 'webp' ? 'png' : options.format,
-      });
+      // Use Sharp extract to crop the slice — operates on image data, no viewport limits
+      const sliceBuffer = await sharp(Buffer.from(fullPageBuffer))
+        .extract({ left: 0, top, width: actualWidth, height })
+        .png()
+        .toBuffer();
 
-      const finalBuffer = await processImageBuffer(segmentBuffer, options);
+      const finalBuffer = await processImageBuffer(sliceBuffer, options);
       await fs.writeFile(partPath, finalBuffer);
 
       if (i === 0) {
@@ -213,7 +222,7 @@ export async function capturePage(
         additionalParts.push(partPath);
       }
 
-      console.log(`  └─ Part ${i + 1}/${segmentCount} saved: ${partFilename}`);
+      console.log(`  └─ Part ${i + 1}/${actualSegmentCount} saved: ${partFilename}`);
     }
 
     return {
@@ -290,9 +299,9 @@ async function autoScroll(page: Page): Promise<void> {
     await page.evaluate(async () => {
       await new Promise<void>((resolve) => {
         let totalHeight = 0;
-        const distance = 600;
+        const distance = 800;
         let scrollCount = 0;
-        const maxScrolls = 15;
+        const maxScrolls = 8; // Reduced from 15 — enough for lazy-load triggering
 
         const timer = setInterval(() => {
           const scrollHeight = document.body.scrollHeight;
@@ -304,12 +313,12 @@ async function autoScroll(page: Page): Promise<void> {
             clearInterval(timer);
             resolve();
           }
-        }, 50);
+        }, 30); // Reduced from 50ms — faster scroll
 
         setTimeout(() => {
           clearInterval(timer);
           resolve();
-        }, 2000);
+        }, 1500); // Reduced from 2000ms
       });
     });
   } catch { /* ignore */ }

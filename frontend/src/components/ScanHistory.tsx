@@ -34,8 +34,8 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
   if (displayScans.length === 0) {
     return (
       <div className="mt-12 text-center py-12">
-        <Globe className="w-10 h-10 text-white/10 mx-auto mb-3" />
-        <p className="text-sm text-white/30">No scans yet. Enter a URL above to get started.</p>
+        <Globe className="w-10 h-10 text-slate-300 dark:text-white/10 mx-auto mb-3" />
+        <p className="text-sm text-slate-500 dark:text-white/30">No scans yet. Enter a URL above to get started.</p>
       </div>
     );
   }
@@ -48,11 +48,11 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
       className="mt-12"
     >
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white/80">Recent Scans</h2>
+        <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Recent Scans</h2>
         {!showAll && scans.length > 5 && (
           <Link
             href="/dashboard"
-            className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+            className="flex items-center gap-1 text-sm text-violet-700 hover:text-violet-900 dark:text-violet-400 dark:hover:text-violet-300 font-extrabold transition-colors"
           >
             View all
             <ArrowRight className="w-3.5 h-3.5" />
@@ -60,7 +60,7 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
         )}
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {displayScans.map((scan, index) => {
           const config = statusConfig[scan.status] || statusConfig.pending;
           const StatusIcon = config.icon;
@@ -75,22 +75,21 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
             >
               <Link
                 href={`/scan/${scan.id}`}
-                className="group flex items-center gap-4 p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-200"
+                className="group flex items-center gap-4 p-4 rounded-2xl border border-slate-300 bg-white hover:border-violet-400 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-violet-500/50 shadow-xs hover:shadow-md transition-all duration-200"
               >
                 {/* Status Icon */}
                 <div
                   className={cn(
-                    'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
-                    scan.status === 'completed' && 'bg-emerald-500/10',
-                    scan.status === 'failed' && 'bg-red-500/10',
-                    isActive && 'bg-violet-500/10',
-                    scan.status === 'pending' && 'bg-amber-500/10'
+                    'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold',
+                    scan.status === 'completed' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400',
+                    scan.status === 'failed' && 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
+                    isActive && 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400',
+                    scan.status === 'pending' && 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
                   )}
                 >
                   <StatusIcon
                     className={cn(
                       'w-4 h-4',
-                      config.color,
                       isActive && 'animate-spin'
                     )}
                   />
@@ -99,30 +98,30 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white/80 truncate">
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
                       {truncateUrl(scan.url, 45)}
                     </span>
                     <span
                       className={cn(
-                        'text-[10px] font-semibold px-2 py-0.5 rounded-full',
-                        scan.status === 'completed' && 'bg-emerald-500/10 text-emerald-400',
-                        scan.status === 'failed' && 'bg-red-500/10 text-red-400',
-                        isActive && 'bg-violet-500/10 text-violet-400',
-                        scan.status === 'pending' && 'bg-amber-500/10 text-amber-400'
+                        'text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider',
+                        scan.status === 'completed' && 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30',
+                        scan.status === 'failed' && 'bg-red-100 text-red-800 border border-red-300 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30',
+                        isActive && 'bg-violet-100 text-violet-800 border border-violet-300 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
+                        scan.status === 'pending' && 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
                       )}
                     >
                       {config.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-white/30">
+                  <div className="flex items-center gap-3 mt-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                     <span>{formatRelativeTime(scan.createdAt)}</span>
-                    {scan.pageCount > 0 && <span>{scan.pageCount} pages</span>}
-                    <span className="uppercase text-[10px]">{scan.deviceTypes.split(',')[0]}</span>
+                    {scan.pageCount > 0 && <span>• {scan.pageCount} pages</span>}
+                    <span className="uppercase text-[10px] bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 px-2 py-0.5 rounded-md font-mono font-bold">{scan.deviceTypes.split(',')[0]}</span>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-2 opacity-70 group-hover:opacity-100 transition-opacity">
                   {onDelete && (
                     <button
                       onClick={(e) => {
@@ -130,12 +129,12 @@ export default function ScanHistory({ scans, onDelete, showAll = false }: ScanHi
                         e.stopPropagation();
                         onDelete(scan.id);
                       }}
-                      className="p-2 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
-                  <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors" />
                 </div>
               </Link>
             </motion.div>

@@ -28,12 +28,10 @@ const features = [
 
 export default function HeroSection() {
   return (
-    <section className="relative overflow-hidden pt-16 pb-24">
-      {/* Animated gradient background */}
+    <section className="relative overflow-hidden py-4">
+      {/* Background glow */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full bg-violet-600/20 blur-[120px] animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full bg-fuchsia-600/15 blur-[100px] animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/3 right-1/3 w-[400px] h-[400px] rounded-full bg-cyan-600/10 blur-[80px] animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] rounded-full bg-gradient-to-tr from-violet-500/20 via-fuchsia-500/10 to-cyan-500/10 dark:from-violet-600/30 dark:to-fuchsia-600/20 blur-[100px] pointer-events-none" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -43,8 +41,8 @@ export default function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-300 border border-violet-500/20 backdrop-blur-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800 border border-violet-300 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/40 shadow-sm backdrop-blur-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             Automated Full-Site Screenshots
           </span>
         </motion.div>
@@ -54,13 +52,11 @@ export default function HeroSection() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="mt-8 text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight"
+          className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white"
         >
-          <span className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
-            Capture Every Page
-          </span>
+          <span>Capture Every Page</span>
           <br />
-          <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-violet-700 via-fuchsia-600 to-indigo-700 dark:from-violet-400 dark:via-fuchsia-400 dark:to-cyan-400 bg-clip-text text-transparent">
             In One Click
           </span>
         </motion.h1>
@@ -70,36 +66,29 @@ export default function HeroSection() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="mt-6 text-lg sm:text-xl text-white/50 max-w-2xl mx-auto leading-relaxed"
+          className="mt-4 text-base sm:text-lg text-slate-700 dark:text-slate-300 max-w-xl mx-auto leading-relaxed font-semibold"
         >
-          Enter any URL and WebSnap Pro automatically crawls the entire site,
-          captures full-page screenshots at multiple viewport sizes, and packages
-          everything into a downloadable ZIP.
+          Enter any URL — we crawl, capture full-page screenshots at every
+          viewport, and package everything into a downloadable format.
         </motion.p>
 
-        {/* Feature cards */}
+        {/* Feature chips */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-16 grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto"
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-6 flex flex-wrap items-center justify-center gap-3"
         >
-          {features.map((feature, index) => {
+          {features.map((feature) => {
             const Icon = feature.icon;
             return (
-              <motion.div
+              <div
                 key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
-                className="group relative p-5 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.05] hover:border-white/10 transition-all duration-300"
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-300 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 text-xs font-bold shadow-sm backdrop-blur-md"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center mb-3 mx-auto group-hover:scale-110 transition-transform">
-                  <Icon className="w-5 h-5 text-violet-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-white/90">{feature.title}</h3>
-                <p className="mt-1 text-xs text-white/40 leading-relaxed">{feature.description}</p>
-              </motion.div>
+                <Icon className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                <span>{feature.title}</span>
+              </div>
             );
           })}
         </motion.div>

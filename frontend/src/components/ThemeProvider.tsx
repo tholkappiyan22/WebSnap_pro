@@ -19,13 +19,16 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
-    // Check for saved preference
+    // Check saved preference or default to light/dark
     const saved = localStorage.getItem('websnap-theme') as Theme;
     if (saved) {
       setTheme(saved);
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(prefersDark ? 'dark' : 'light');
     }
   }, []);
 

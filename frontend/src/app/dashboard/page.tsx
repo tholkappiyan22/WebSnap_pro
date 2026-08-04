@@ -60,12 +60,12 @@ export default function DashboardPage() {
         className="mb-8"
       >
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
-            <LayoutDashboard className="w-5 h-5 text-violet-400" />
+          <div className="w-10 h-10 rounded-xl bg-violet-100 border border-violet-300 dark:bg-violet-500/20 dark:border-violet-500/30 flex items-center justify-center">
+            <LayoutDashboard className="w-5 h-5 text-violet-700 dark:text-violet-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white/90">Dashboard</h1>
-            <p className="text-sm text-white/40">Manage and review your scan history</p>
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Dashboard</h1>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Manage and review your scan history</p>
           </div>
         </div>
       </motion.div>
@@ -77,34 +77,34 @@ export default function DashboardPage() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"
       >
-        <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm">
+        <div className="p-5 rounded-2xl border border-slate-300 bg-white dark:border-slate-800 dark:bg-slate-900/90 shadow-xs backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-              <Camera className="w-4 h-4 text-violet-400" />
+            <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center">
+              <Camera className="w-4 h-4 text-violet-700 dark:text-violet-400" />
             </div>
-            <span className="text-sm text-white/40">Total Scans</span>
+            <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Total Scans</span>
           </div>
-          <div className="text-3xl font-bold text-white/90">{totalScans}</div>
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{totalScans}</div>
         </div>
 
-        <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm">
+        <div className="p-5 rounded-2xl border border-slate-300 bg-white dark:border-slate-800 dark:bg-slate-900/90 shadow-xs backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
             </div>
-            <span className="text-sm text-white/40">Completed</span>
+            <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Completed</span>
           </div>
-          <div className="text-3xl font-bold text-emerald-400">{completedScans}</div>
+          <div className="text-3xl font-extrabold text-emerald-700 dark:text-emerald-400">{completedScans}</div>
         </div>
 
-        <div className="p-5 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm">
+        <div className="p-5 rounded-2xl border border-slate-300 bg-white dark:border-slate-800 dark:bg-slate-900/90 shadow-xs backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-              <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-500/20 flex items-center justify-center">
+              <BarChart3 className="w-4 h-4 text-cyan-700 dark:text-cyan-400" />
             </div>
-            <span className="text-sm text-white/40">Pages Captured</span>
+            <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Pages Captured</span>
           </div>
-          <div className="text-3xl font-bold text-white/90">{totalPages}</div>
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white">{totalPages}</div>
         </div>
       </motion.div>
 
@@ -117,19 +117,19 @@ export default function DashboardPage() {
       >
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by URL..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500/30 transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-300 text-sm font-bold text-slate-900 placeholder-slate-400 outline-none focus:border-violet-600 dark:bg-slate-900 dark:border-slate-800 dark:text-white dark:placeholder-slate-500 dark:focus:border-violet-500 shadow-xs transition-colors"
             id="dashboard-search"
           />
         </div>
 
         {/* Status Filters */}
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/5">
+        <div className="flex gap-1 p-1 rounded-xl bg-slate-100 border border-slate-300 dark:bg-slate-900 dark:border-slate-800">
           {statusFilters.map((filter) => {
             const Icon = filter.icon;
             const isActive = statusFilter === filter.value;
@@ -141,8 +141,8 @@ export default function DashboardPage() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                   isActive
-                    ? 'bg-violet-500/20 text-violet-300'
-                    : 'text-white/40 hover:text-white/60'
+                    ? 'bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300 font-semibold'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-white/40 dark:hover:text-white/60'
                 )}
               >
                 <Icon className={cn('w-3.5 h-3.5', isActive && filter.value === 'capturing' && 'animate-spin')} />
@@ -174,8 +174,8 @@ export default function DashboardPage() {
               className={cn(
                 'w-8 h-8 rounded-lg text-sm font-medium transition-all',
                 pagination.page === i + 1
-                  ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                  : 'text-white/40 hover:text-white/60 hover:bg-white/[0.05]'
+                  ? 'bg-violet-500/15 text-violet-700 border border-violet-500/30 dark:bg-violet-500/20 dark:text-violet-300'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-white/40 dark:hover:text-white/60 dark:hover:bg-white/[0.05]'
               )}
             >
               {i + 1}

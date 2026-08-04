@@ -15,6 +15,7 @@ import {
   ImageIcon,
   Layers,
   Gauge,
+  ClipboardPaste,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ScanConfig, ImageFormat } from '@/types';
@@ -63,6 +64,21 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
   const [maxPages, setMaxPages] = useState(50);
   const [maxDepth, setMaxDepth] = useState(3);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pasteSuccess, setPasteSuccess] = useState(false);
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setUrl(text.trim());
+        setPasteSuccess(true);
+        setTimeout(() => setPasteSuccess(false), 1500);
+      }
+    } catch {
+      // Clipboard API denied — fallback: focus the input so user can Ctrl+V
+      document.getElementById('url-input')?.focus();
+    }
+  };
 
   const validateUrl = (value: string): boolean => {
     if (!value.trim()) {
@@ -106,10 +122,9 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
       className="max-w-2xl mx-auto"
     >
       {/* URL Input */}
-      <div className="relative group">
-        <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-500 opacity-20 blur group-hover:opacity-30 transition-opacity" />
-        <div className="relative flex items-center gap-3 bg-white/[0.05] border border-white/10 rounded-2xl px-5 py-4 backdrop-blur-xl">
-          <Globe className="w-5 h-5 text-white/30 flex-shrink-0" />
+      <div className="relative">
+        <div className="relative flex items-center gap-3 bg-white border-2 border-slate-300 focus-within:border-violet-600 dark:bg-slate-900/90 dark:border-slate-700 dark:focus-within:border-violet-500 rounded-2xl px-5 py-3.5 shadow-lg dark:shadow-xl dark:shadow-slate-950/60 backdrop-blur-xl transition-all">
+          <Globe className="w-5 h-5 text-slate-400 dark:text-slate-400 flex-shrink-0" />
           <input
             type="text"
             value={url}
@@ -118,18 +133,37 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
               if (urlError) validateUrl(e.target.value);
             }}
             placeholder="Enter website URL (e.g., example.com)"
-            className="flex-1 bg-transparent text-white placeholder-white/30 text-lg outline-none"
+            className="flex-1 bg-transparent text-slate-900 placeholder-slate-400 dark:text-white dark:placeholder-slate-500 text-base sm:text-lg font-semibold outline-none"
             disabled={isLoading}
             id="url-input"
           />
+
+          {/* Paste button */}
+          <button
+            type="button"
+            onClick={handlePaste}
+            disabled={isLoading}
+            className={cn(
+              'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex-shrink-0 cursor-pointer',
+              pasteSuccess
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40'
+                : 'bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-white',
+              'disabled:opacity-40 disabled:cursor-not-allowed'
+            )}
+            id="paste-button"
+            title="Paste URL from clipboard"
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            <span className="hidden sm:inline">{pasteSuccess ? 'Pasted!' : 'Paste'}</span>
+          </button>
+
           <button
             type="submit"
             disabled={isLoading || !url.trim()}
             className={cn(
-              'px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300',
-              'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white',
-              'hover:from-violet-400 hover:to-fuchsia-400 hover:shadow-lg hover:shadow-violet-500/25',
-              'active:scale-95',
+              'px-6 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-200 cursor-pointer',
+              'bg-violet-700 hover:bg-violet-800 dark:bg-gradient-to-r dark:from-violet-600 dark:to-fuchsia-600 text-white',
+              'shadow-md shadow-violet-700/20 hover:shadow-violet-700/40 active:scale-95',
               'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none'
             )}
             id="scan-button"
@@ -153,7 +187,7 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-center gap-2 mt-3 ml-2 text-sm text-red-400"
+            className="flex items-center gap-2 mt-3 ml-2 text-sm text-red-600 dark:text-red-400 font-semibold"
           >
             <AlertCircle className="w-4 h-4" />
             {urlError}
@@ -174,13 +208,13 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
               onClick={() => setSelectedDevice(preset.id)}
               disabled={isLoading}
               className={cn(
-                'relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                'relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-200 cursor-pointer',
                 isSelected
-                  ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                  : 'bg-white/[0.03] text-white/40 border border-white/5 hover:bg-white/[0.06] hover:text-white/60'
+                  ? 'bg-violet-700 text-white border border-violet-700 shadow-md shadow-violet-700/20 dark:bg-violet-600 dark:border-violet-500'
+                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 hover:text-slate-900 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-white shadow-xs'
               )}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className={cn('w-4 h-4', isSelected ? 'text-white' : 'text-violet-600 dark:text-violet-400')} />
               <span className="hidden sm:inline">{preset.label}</span>
             </button>
           );
@@ -192,12 +226,12 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1.5 text-sm text-white/30 hover:text-white/50 transition-colors"
+          className="flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors cursor-pointer"
         >
-          <Settings2 className="w-3.5 h-3.5" />
+          <Settings2 className="w-4 h-4 text-violet-600 dark:text-violet-400" />
           Advanced Settings
           <ChevronDown
-            className={cn('w-3.5 h-3.5 transition-transform', showAdvanced && 'rotate-180')}
+            className={cn('w-4 h-4 transition-transform text-slate-500 dark:text-slate-400', showAdvanced && 'rotate-180')}
           />
         </button>
       </div>
@@ -212,11 +246,11 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
             transition={{ duration: 0.3 }}
             className="overflow-hidden"
           >
-            <div className="mt-4 p-5 rounded-2xl bg-white/[0.03] border border-white/5 space-y-5">
+            <div className="mt-4 p-5 rounded-2xl bg-white border border-slate-300 dark:bg-slate-900 dark:border-slate-800 shadow-lg space-y-5">
               {/* Format */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-white/50">
-                  <ImageIcon className="w-4 h-4" />
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200">
+                  <ImageIcon className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                   Format
                 </div>
                 <div className="flex gap-2">
@@ -226,10 +260,10 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
                       type="button"
                       onClick={() => setFormat(opt.id)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                        'px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer',
                         format === opt.id
-                          ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                          : 'bg-white/[0.03] text-white/40 border border-white/5 hover:text-white/60'
+                          ? 'bg-violet-700 text-white border border-violet-700 dark:bg-violet-600 dark:border-violet-500 shadow-xs'
+                          : 'bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 dark:hover:text-white'
                       )}
                     >
                       {opt.label}
@@ -241,11 +275,11 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
               {/* Quality */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 text-sm text-white/50">
-                    <Gauge className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200">
+                    <Gauge className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                     Quality
                   </div>
-                  <span className="text-sm text-violet-400 font-mono">{quality}%</span>
+                  <span className="text-sm text-violet-700 dark:text-violet-400 font-mono font-extrabold">{quality}%</span>
                 </div>
                 <input
                   type="range"
@@ -254,32 +288,32 @@ export default function ScanForm({ onSubmit, isLoading }: ScanFormProps) {
                   step={5}
                   value={quality}
                   onChange={(e) => setQuality(Number(e.target.value))}
-                  className="w-full accent-violet-500"
+                  className="w-full accent-violet-700 dark:accent-violet-500 cursor-pointer"
                 />
               </div>
 
               {/* Max Pages & Depth */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-white/50 mb-1.5">Max Pages</label>
+                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-300 mb-1.5">Max Pages</label>
                   <input
                     type="number"
                     min={1}
                     max={200}
                     value={maxPages}
                     onChange={(e) => setMaxPages(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm outline-none focus:border-violet-500/50 transition-colors"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-bold text-sm outline-none focus:border-violet-600 dark:focus:border-violet-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-white/50 mb-1.5">Max Depth</label>
+                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-300 mb-1.5">Max Depth</label>
                   <input
                     type="number"
                     min={1}
                     max={10}
                     value={maxDepth}
                     onChange={(e) => setMaxDepth(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-white text-sm outline-none focus:border-violet-500/50 transition-colors"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white font-bold text-sm outline-none focus:border-violet-600 dark:focus:border-violet-500 transition-colors"
                   />
                 </div>
               </div>

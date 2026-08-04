@@ -40,22 +40,25 @@ export default function HomePage() {
 
   return (
     <div className="page-transition">
-      <HeroSection />
+      {/* Hero + Form — vertically centered in viewport (minus navbar height) */}
+      <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+        <HeroSection />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 pb-16">
-        <ScanForm onSubmit={handleScan} isLoading={isScanning} />
+        <div className="w-full max-w-2xl mt-8">
+          <ScanForm onSubmit={handleScan} isLoading={isScanning} />
+        </div>
 
         {/* Error display */}
         {error && (
-          <div className="max-w-2xl mx-auto mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400 text-center">
+          <div className="max-w-2xl w-full mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400 text-center">
             {error}
           </div>
         )}
+      </div>
 
-        {/* Recent Scans */}
-        <div className="max-w-2xl mx-auto">
-          <ScanHistory scans={scans} onDelete={handleDelete} />
-        </div>
+      {/* Recent Scans — sits below the centered hero area */}
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+        <ScanHistory scans={scans} onDelete={handleDelete} />
       </div>
     </div>
   );
