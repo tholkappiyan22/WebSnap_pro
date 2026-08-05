@@ -83,8 +83,8 @@ class JobService extends EventEmitter {
   constructor() {
     super();
     this.setMaxListeners(100); // Allow many SSE listeners
-    // Default concurrency to 1 (prevents OOM on 512MB free cloud tiers)
-    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || '1', 10);
+    // Increased default from 3→5 for faster throughput
+    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || '5', 10);
   }
 
   /**
