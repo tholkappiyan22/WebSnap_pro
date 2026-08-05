@@ -10,6 +10,9 @@ COPY prisma ./prisma/
 # Install dependencies
 RUN npm ci
 
+# Install matching Chromium browser binary for Playwright
+RUN npx playwright install chromium
+
 # Generate Prisma client
 RUN npx prisma generate
 
