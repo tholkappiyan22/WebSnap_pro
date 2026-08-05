@@ -9,6 +9,7 @@ import { apiRateLimiter } from './middleware/rateLimiter';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // --- Middleware ---

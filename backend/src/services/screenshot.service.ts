@@ -57,6 +57,13 @@ export async function launchBrowser(): Promise<Browser> {
       '--no-first-run',
       '--no-zygote',
       '--disable-background-networking',
+      '--disable-audio-output',
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--mute-audio',
     ],
   });
 
@@ -117,15 +124,15 @@ export async function capturePage(
     // Navigate using domcontentloaded
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
-      timeout: options.timeout || 30000,
+      timeout: options.timeout || 20000,
     });
 
-    // Wait for network idle (max 2s)
+    // Wait for network idle (max 1s)
     try {
-      await page.waitForLoadState('networkidle', { timeout: 2000 });
+      await page.waitForLoadState('networkidle', { timeout: 1000 });
     } catch { /* ignore */ }
 
-    // Wait for content (max 3s)
+    // Wait for content (max 1.5s)
     await waitForContent(page);
 
     // Fast auto-scroll to trigger lazy loading
@@ -133,7 +140,7 @@ export async function capturePage(
 
     // Scroll back to top
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
 
     // Optional pre-capture delay (capped at 2s)
     if (options.preDelay > 0) {
