@@ -245,7 +245,12 @@ export async function capturePage(
     }
 
     const title = (await page.title()) || 'Untitled Page';
-    const fullPageBuffer = await page.screenshot({ fullPage: true, type: 'png' });
+    const fullPageBuffer = await page.screenshot({
+      fullPage: true,
+      type: 'png',
+      animations: 'disabled',
+      timeout: 10000,
+    });
 
     return await processAndSaveImageBuffer(
       fullPageBuffer,

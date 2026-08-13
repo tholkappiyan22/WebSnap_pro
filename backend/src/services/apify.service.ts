@@ -15,19 +15,20 @@ export interface ApifyCaptureOptions {
 export function isApifyEnabled(): boolean {
   const token = process.env.APIFY_API_TOKEN;
   const useApify = process.env.USE_APIFY;
-  return Boolean(token && token.trim() !== '' && useApify !== 'false');
+  return Boolean((token && token.trim() !== '') || useApify !== 'false');
 }
 
 /**
- * Captures a webpage screenshot using high-speed Cloud APIs.
- * Combines instant Microlink API (1-2s response) + Apify Cloud Actor.
- * Reduces total scan time from 4+ minutes down to 10-20 seconds!
+ * Captures a webpage screenshot using multi-layered high-speed Cloud APIs.
+ * 1. Microlink API (High quality)
+ * 2. WordPress mShots API (Unlimited, 100% free, 1-second response time)
+ * 3. Apify Actor fallback
  */
 export async function capturePageWithApify(
   url: string,
   options: ApifyCaptureOptions
 ): Promise<Buffer> {
-  // 1. Instant High-Speed Cloud API (~1.5s response time, zero RAM load on EC2)
+  // 1. Try Microlink API
   try {
     console.log(`⚡ [Cloud Engine] Fast capturing ${url} (${options.viewport.width}x${options.viewport.height})...`);
     const response = await axios.get('https://api.microlink.io', {
@@ -39,21 +40,39 @@ export async function capturePageWithApify(
         fullPage: true,
       },
       responseType: 'arraybuffer',
-      timeout: options.timeout || 12000,
+      timeout: Math.min(options.timeout || 10000, 10000),
     });
 
     if (response.status === 200 && response.data && response.data.length > 1000) {
-      console.log(`✅ [Cloud Engine] Fast capture completed for ${url}`);
+      console.log(`✅ [Cloud Engine] Microlink capture completed for ${url}`);
       return Buffer.from(response.data);
     }
   } catch (err: any) {
-    console.warn(`⚠️ [Cloud Engine] Fast mode fallback: ${err.message || err}. Invoking Apify actor...`);
+    console.warn(`⚠️ [Cloud Engine] Microlink skipped (${err.message || err}). Trying mShots engine...`);
   }
 
-  // 2. Apify Actor fallback (apify/screenshot-url)
+  // 2. Try WordPress mShots API (100% Free, Unlimited, Instant response)
+  try {
+    const encodedUrl = encodeURIComponent(url);
+    const mShotsUrl = `https://s0.wp.com/mshots/v1/${encodedUrl}?w=${options.viewport.width}&h=${options.viewport.height}`;
+    
+    const response = await axios.get(mShotsUrl, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+    });
+
+    if (response.status === 200 && response.data && response.data.length > 1000) {
+      console.log(`✅ [Cloud Engine] mShots fast capture completed for ${url}`);
+      return Buffer.from(response.data);
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ [Cloud Engine] mShots skipped (${err.message || err}). Trying Apify actor...`);
+  }
+
+  // 3. Apify Actor fallback (apify/screenshot-url)
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
-    throw new Error('APIFY_API_TOKEN is missing');
+    throw new Error('No cloud API provider succeeded and APIFY_API_TOKEN is missing');
   }
 
   const client = new ApifyClient({ token });
@@ -68,7 +87,7 @@ export async function capturePageWithApify(
       fullPage: true,
     },
     {
-      timeout: options.timeout ? Math.ceil(options.timeout / 1000) : 30,
+      timeout: options.timeout ? Math.ceil(options.timeout / 1000) : 25,
     }
   );
 
