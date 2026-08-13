@@ -4,6 +4,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import scanRoutes from './routes/scan.routes';
 import { apiRateLimiter } from './middleware/rateLimiter';
+import { startAutomaticCleanup } from './services/cleanup.service';
 
 import { exec } from 'child_process';
 
@@ -77,6 +78,9 @@ app.listen(PORT, () => {
   ║                                          ║
   ╚══════════════════════════════════════════╝
   `);
+
+  // Start automatic 48-hour background file & DB cleanup service (runs every 6 hours)
+  startAutomaticCleanup(48, 6);
 });
 
 export default app;
