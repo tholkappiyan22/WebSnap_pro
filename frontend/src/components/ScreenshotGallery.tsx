@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Download,
@@ -13,15 +13,19 @@ import {
   ZoomIn,
   AlertCircle,
   FileImage,
+  Loader2,
 } from 'lucide-react';
 import { cn, formatBytes } from '@/lib/utils';
-import { getScreenshotFullUrl, getDownloadUrl } from '@/lib/api';
+import { getScreenshotFullUrl, fetchImageBlob } from '@/lib/api';
+import { getScreenshotObjectUrl, saveScreenshotBlob } from '@/lib/indexeddb';
+import { downloadZipFromBrowserMemory } from '@/lib/zip';
 import type { PageResult } from '@/types';
 
 interface ScreenshotGalleryProps {
   pages: PageResult[];
   scanId: string;
   scanStatus: string;
+  scanUrl?: string;
 }
 
 const deviceIcons: Record<string, React.ElementType> = {
@@ -31,9 +35,11 @@ const deviceIcons: Record<string, React.ElementType> = {
   mobile: Smartphone,
 };
 
-export default function ScreenshotGallery({ pages, scanId, scanStatus }: ScreenshotGalleryProps) {
+export default function ScreenshotGallery({ pages, scanId, scanStatus, scanUrl = '' }: ScreenshotGalleryProps) {
   const [selectedPage, setSelectedPage] = useState<PageResult | null>(null);
   const [filterDevice, setFilterDevice] = useState<string>('all');
+  const [blobUrls, setBlobUrls] = useState<Record<string, { full?: string; thumb?: string }>>({});
+  const [isZipping, setIsZipping] = useState(false);
 
   const completedPages = pages.filter((p) => p.status === 'completed');
   const failedPages = pages.filter((p) => p.status === 'failed');
@@ -44,27 +50,76 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
 
   const deviceTypes = [...new Set(pages.map((p) => p.deviceType))];
 
-  const handleDownloadAll = (e: React.MouseEvent) => {
-    if (completedPages.length <= 5) {
-      e.preventDefault();
-      completedPages.forEach((page, index) => {
-        const screenshotUrl = page.screenshotUrl;
-        if (screenshotUrl) {
-          const title = page.title;
-          const pagePath = page.path;
-          const deviceType = page.deviceType;
-          setTimeout(() => {
-            const a = document.createElement('a');
-            a.href = getScreenshotFullUrl(screenshotUrl);
-            const ext = screenshotUrl.split('.').pop() || 'png';
-            const cleanTitle = (title || pagePath || 'screenshot').replace(/[^a-zA-Z0-9-_]/g, '_');
-            a.download = `${cleanTitle}-${deviceType}.${ext}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }, index * 300);
+  // Load / cache images in browser memory (IndexedDB)
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAndCacheImages() {
+      const updates: Record<string, { full?: string; thumb?: string }> = {};
+
+      for (const page of completedPages) {
+        let fullUrl: string | null = await getScreenshotObjectUrl(scanId, page.id, 'full');
+        let thumbUrl: string | null = await getScreenshotObjectUrl(scanId, page.id, 'thumb');
+
+        // Cache full image to browser IndexedDB if missing
+        if (!fullUrl && page.screenshotUrl) {
+          try {
+            const blob = await fetchImageBlob(page.screenshotUrl);
+            const ext = page.screenshotUrl.split('.').pop() || 'png';
+            const cleanTitle = (page.title || page.path || 'screenshot').replace(/[^a-zA-Z0-9-_]/g, '_');
+            const filename = `${cleanTitle}-${page.deviceType}.${ext}`;
+            await saveScreenshotBlob(scanId, page.id, 'full', blob, filename);
+            fullUrl = URL.createObjectURL(blob);
+          } catch (e) {
+            fullUrl = getScreenshotFullUrl(page.screenshotUrl);
+          }
         }
-      });
+
+        // Cache thumbnail to browser IndexedDB if missing
+        if (!thumbUrl && page.thumbnailUrl) {
+          try {
+            const blob = await fetchImageBlob(page.thumbnailUrl);
+            const ext = page.thumbnailUrl.split('.').pop() || 'png';
+            const cleanTitle = (page.title || page.path || 'screenshot').replace(/[^a-zA-Z0-9-_]/g, '_');
+            const filename = `${cleanTitle}-${page.deviceType}-thumb.${ext}`;
+            await saveScreenshotBlob(scanId, page.id, 'thumb', blob, filename);
+            thumbUrl = URL.createObjectURL(blob);
+          } catch (e) {
+            thumbUrl = getScreenshotFullUrl(page.thumbnailUrl);
+          }
+        }
+
+        updates[page.id] = {
+          full: fullUrl || (page.screenshotUrl ? getScreenshotFullUrl(page.screenshotUrl) : undefined),
+          thumb: thumbUrl || (page.thumbnailUrl ? getScreenshotFullUrl(page.thumbnailUrl) : undefined),
+        };
+      }
+
+      if (isMounted) {
+        setBlobUrls(updates);
+      }
+    }
+
+    if (completedPages.length > 0) {
+      loadAndCacheImages();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [completedPages.length, scanId]);
+
+  const handleDownloadAll = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (completedPages.length === 0 || isZipping) return;
+
+    try {
+      setIsZipping(true);
+      await downloadZipFromBrowserMemory(scanId, scanUrl, completedPages);
+    } catch (err) {
+      console.error('Browser memory ZIP creation failed:', err);
+    } finally {
+      setIsZipping(false);
     }
   };
 
@@ -123,17 +178,17 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
             })}
           </div>
 
-          {/* Download All */}
+          {/* Download All (Browser Memory JSZip) */}
           {scanStatus === 'completed' && completedPages.length > 0 && (
-            <a
-              href={completedPages.length <= 5 ? '#' : getDownloadUrl(scanId)}
+            <button
               onClick={handleDownloadAll}
-              className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-800 dark:bg-gradient-to-r dark:from-violet-600 dark:to-fuchsia-600 text-white text-sm font-extrabold shadow-md shadow-violet-700/20 dark:shadow-violet-600/30 hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              disabled={isZipping}
+              className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-800 dark:bg-gradient-to-r dark:from-violet-600 dark:to-fuchsia-600 text-white text-sm font-extrabold shadow-md shadow-violet-700/20 dark:shadow-violet-600/30 hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               id="download-button"
             >
-              <Download className="w-4 h-4" />
-              {completedPages.length <= 5 ? (completedPages.length === 1 ? 'Download Image' : 'Download Images') : 'Download ZIP'}
-            </a>
+              {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isZipping ? 'Generating ZIP...' : (completedPages.length <= 5 ? (completedPages.length === 1 ? 'Download Image' : 'Download Images') : 'Download ZIP')}
+            </button>
           )}
         </div>
       </div>
@@ -143,6 +198,8 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
         <AnimatePresence mode="popLayout">
           {filteredPages.map((page, index) => {
             const DeviceIcon = deviceIcons[page.deviceType] || Monitor;
+            const displayThumb = blobUrls[page.id]?.thumb || blobUrls[page.id]?.full || (page.thumbnailUrl ? getScreenshotFullUrl(page.thumbnailUrl) : null);
+            const displayFull = blobUrls[page.id]?.full || (page.screenshotUrl ? getScreenshotFullUrl(page.screenshotUrl) : '#');
 
             return (
               <motion.div
@@ -156,9 +213,9 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
               >
                 {/* Thumbnail */}
                 <div className="relative aspect-[16/10] bg-slate-100 dark:bg-slate-950 overflow-hidden border-b border-slate-200 dark:border-slate-800">
-                  {page.thumbnailUrl ? (
+                  {displayThumb ? (
                     <img
-                      src={getScreenshotFullUrl(page.thumbnailUrl)}
+                      src={displayThumb}
                       alt={page.title || page.path}
                       className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
@@ -179,9 +236,9 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
                         <ZoomIn className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                         Preview
                       </button>
-                      {page.screenshotUrl && (
+                      {displayFull && (
                         <a
-                          href={getScreenshotFullUrl(page.screenshotUrl)}
+                          href={displayFull}
                           download
                           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/90 text-slate-900 dark:bg-slate-900/90 dark:text-white border border-slate-200 dark:border-slate-700 backdrop-blur-md text-xs font-bold hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         >
@@ -262,9 +319,9 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
               </button>
 
               {/* Image */}
-              {selectedPage.screenshotUrl && (
+              {(selectedPage.screenshotUrl || blobUrls[selectedPage.id]?.full) && (
                 <img
-                  src={getScreenshotFullUrl(selectedPage.screenshotUrl)}
+                  src={blobUrls[selectedPage.id]?.full || getScreenshotFullUrl(selectedPage.screenshotUrl!)}
                   alt={selectedPage.title || selectedPage.path}
                   className="w-full"
                 />
@@ -292,7 +349,7 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
                   </a>
                   {selectedPage.screenshotUrl && (
                     <a
-                      href={getScreenshotFullUrl(selectedPage.screenshotUrl)}
+                      href={blobUrls[selectedPage.id]?.full || getScreenshotFullUrl(selectedPage.screenshotUrl)}
                       download
                       className="p-2 rounded-lg bg-slate-200/80 dark:bg-white/5 text-slate-600 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-300 dark:hover:bg-white/10 transition-colors"
                     >
@@ -308,3 +365,4 @@ export default function ScreenshotGallery({ pages, scanId, scanStatus }: Screens
     </motion.div>
   );
 }
+

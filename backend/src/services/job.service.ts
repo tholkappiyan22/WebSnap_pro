@@ -3,7 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import { crawlWebsite, CrawlOptions, DiscoveredPage } from './crawler.service';
 import { capturePage, CaptureOptions, VIEWPORTS } from './screenshot.service';
 import { createZipArchive, ZipEntry } from './zip.service';
+import { purgeScanFiles } from './cleanup.service';
 import { isApifyEnabled } from './apify.service';
+
 import { generateScreenshotFilename } from '../utils/filename';
 import { getDomain } from '../utils/url';
 import path from 'path';
@@ -298,25 +300,13 @@ class JobService extends EventEmitter {
 
       if (jobState.aborted) return;
 
-      // --- Phase 3: Create ZIP ---
-      await this.log(scanId, 'info', 'Creating ZIP archive...');
-
-      const domain = getDomain(scan.url);
-      const zipFilename = `${domain.replace(/\./g, '-')}.zip`;
-
-      let zipPath: string | null = null;
-      if (zipEntries.length > 0) {
-        zipPath = await createZipArchive(zipEntries, screenshotsDir, zipFilename);
-      }
-
-      // --- Done ---
+      // --- Phase 3: Completion ---
       await prisma.scan.update({
         where: { id: scanId },
         data: {
           status: 'completed',
           completedAt: new Date(),
           pageCount: completed,
-          zipPath,
         },
       });
 
@@ -329,6 +319,12 @@ class JobService extends EventEmitter {
         pagesCompleted: completed,
         pagesTotal: totalCaptures,
       });
+
+      // Automatically purge server disk files after 5 minutes to keep Render storage empty
+      setTimeout(() => {
+        purgeScanFiles(scanId).catch(() => {});
+      }, 5 * 60 * 1000);
+
     } catch (error: any) {
       console.error(`Scan failed: ${scanId}`, error);
 

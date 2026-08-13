@@ -13,9 +13,11 @@ import {
 import ProgressTracker from '@/components/ProgressTracker';
 import ScreenshotGallery from '@/components/ScreenshotGallery';
 import { useScanProgress } from '@/hooks/useScanProgress';
-import { getScreenshots, getDownloadUrl, getScreenshotFullUrl } from '@/lib/api';
+import { getScreenshots, getScreenshotFullUrl } from '@/lib/api';
+import { downloadZipFromBrowserMemory } from '@/lib/zip';
 import { formatRelativeTime, truncateUrl } from '@/lib/utils';
 import type { ScanDetail } from '@/types';
+
 
 export default function ScanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -85,27 +87,19 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
   const isComplete = currentStatus === 'completed';
   const completedPages = scanData?.pages.filter((p) => p.status === 'completed') || [];
 
-  const handleDownloadAll = (e: React.MouseEvent) => {
-    if (completedPages.length <= 5) {
-      e.preventDefault();
-      completedPages.forEach((page, index) => {
-        const screenshotUrl = page.screenshotUrl;
-        if (screenshotUrl) {
-          const title = page.title;
-          const pagePath = page.path;
-          const deviceType = page.deviceType;
-          setTimeout(() => {
-            const a = document.createElement('a');
-            a.href = getScreenshotFullUrl(screenshotUrl);
-            const ext = screenshotUrl.split('.').pop() || 'png';
-            const cleanTitle = (title || pagePath || 'screenshot').replace(/[^a-zA-Z0-9-_]/g, '_');
-            a.download = `${cleanTitle}-${deviceType}.${ext}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }, index * 300);
-        }
-      });
+  const [isZipping, setIsZipping] = useState(false);
+
+  const handleDownloadAll = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!scanData || completedPages.length === 0 || isZipping) return;
+
+    try {
+      setIsZipping(true);
+      await downloadZipFromBrowserMemory(scanData.id, scanData.url, completedPages);
+    } catch (err) {
+      console.error('Browser memory download failed:', err);
+    } finally {
+      setIsZipping(false);
     }
   };
 
@@ -153,14 +147,14 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
           </button>
 
           {isComplete && scanData && completedPages.length > 0 && (
-            <a
-              href={completedPages.length <= 5 ? '#' : getDownloadUrl(scanData.id)}
+            <button
               onClick={handleDownloadAll}
-              className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-800 dark:bg-gradient-to-r dark:from-violet-600 dark:to-fuchsia-600 text-white text-sm font-extrabold shadow-md shadow-violet-700/20 dark:shadow-violet-600/30 hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              disabled={isZipping}
+              className="flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-800 dark:bg-gradient-to-r dark:from-violet-600 dark:to-fuchsia-600 text-white text-sm font-extrabold shadow-md shadow-violet-700/20 dark:shadow-violet-600/30 hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-4 h-4" />
-              {completedPages.length <= 5 ? (completedPages.length === 1 ? 'Download Image' : 'Download Images') : 'Download ZIP'}
-            </a>
+              {isZipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isZipping ? 'Generating ZIP...' : (completedPages.length <= 5 ? (completedPages.length === 1 ? 'Download Image' : 'Download Images') : 'Download ZIP')}
+            </button>
           )}
         </div>
       </motion.div>
@@ -174,8 +168,10 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
           pages={scanData.pages}
           scanId={scanData.id}
           scanStatus={currentStatus}
+          scanUrl={scanData.url}
         />
       )}
     </div>
   );
+
 }

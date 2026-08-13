@@ -74,3 +74,18 @@ export function startAutomaticCleanup(retentionHours = 48, intervalHours = 6): v
 
   console.log(`⏱️ [Auto-Cleanup Service] Scheduled to run every ${intervalHours} hours (deleting scans older than ${retentionHours}h).`);
 }
+
+/**
+ * Purges physical screenshot files from server disk for a given scanId (e.g. after scan finishes or transfer to browser memory).
+ */
+export async function purgeScanFiles(scanId: string): Promise<void> {
+  try {
+    const baseScreenshotsDir = path.resolve(process.env.SCREENSHOTS_DIR || './screenshots');
+    const scanDir = path.join(baseScreenshotsDir, scanId);
+    await fs.rm(scanDir, { recursive: true, force: true }).catch(() => {});
+    console.log(`🧹 [Disk Purge] Purged server disk files for scan ${scanId}`);
+  } catch (err: any) {
+    console.error(`Failed to purge files for scan ${scanId}:`, err.message);
+  }
+}
+

@@ -41,7 +41,17 @@ export function getProgressUrl(scanId: string): string {
 
 /** Get the full screenshot URL */
 export function getScreenshotFullUrl(relativePath: string): string {
+  if (relativePath.startsWith('blob:') || relativePath.startsWith('data:')) {
+    return relativePath;
+  }
   return `${API_BASE}${relativePath}`;
+}
+
+/** Fetch an image from backend as a binary Blob */
+export async function fetchImageBlob(relativePath: string): Promise<Blob> {
+  const url = getScreenshotFullUrl(relativePath);
+  const response = await axios.get(url, { responseType: 'blob' });
+  return response.data;
 }
 
 /** Delete a scan */
@@ -61,3 +71,4 @@ export async function listScans(params?: {
 }
 
 export default api;
+
