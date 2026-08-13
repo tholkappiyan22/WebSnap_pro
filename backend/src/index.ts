@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import scanRoutes from './routes/scan.routes';
 import { apiRateLimiter } from './middleware/rateLimiter';
 
+import { exec } from 'child_process';
+
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -13,6 +15,15 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 const PORT = parseInt(process.env.PORT || '3001', 10);
+
+// Auto-sync SQLite database schema on startup
+exec('npx prisma db push --skip-generate', (err) => {
+  if (err) {
+    console.warn('Prisma db push notice:', err.message);
+  } else {
+    console.log('✅ SQLite database schema synced');
+  }
+});
 
 // --- Middleware ---
 app.use(cors({
