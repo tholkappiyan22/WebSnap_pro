@@ -2,6 +2,7 @@ import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
+import { isApifyEnabled, capturePageWithApify } from './apify.service';
 
 /** Viewport presets for multi-device capture */
 export const VIEWPORTS: Record<string, { width: number; height: number }> = {
@@ -96,9 +97,87 @@ export async function closeBrowser(): Promise<void> {
 }
 
 /**
+ * Helper to process and save captured screenshot image buffer (from Apify or Playwright).
+ */
+async function processAndSaveImageBuffer(
+  fullPageBuffer: Buffer,
+  url: string,
+  outputDir: string,
+  filename: string,
+  options: CaptureOptions,
+  viewport: { width: number; height: number },
+  pageTitle = 'Untitled Page'
+): Promise<CaptureResult> {
+  await fs.mkdir(outputDir, { recursive: true });
+
+  const meta = await sharp(Buffer.from(fullPageBuffer)).metadata();
+  const actualWidth = meta.width || viewport.width;
+  const actualHeight = meta.height || viewport.height;
+
+  const maxSegmentHeight = viewport.height * 5; // 5 viewport screen heights
+
+  if (actualHeight <= maxSegmentHeight) {
+    const screenshotPath = path.join(outputDir, filename);
+    const finalBuffer = await processImageBuffer(fullPageBuffer, options);
+    await fs.writeFile(screenshotPath, finalBuffer);
+
+    const thumbnailPath = await generateThumbnail(finalBuffer, outputDir, filename);
+    console.log(`✅ Screenshot saved: ${filename} (${Math.round(finalBuffer.length / 1024)} KB)`);
+
+    return {
+      screenshotPath,
+      thumbnailPath,
+      fileSize: finalBuffer.length,
+      title: pageTitle,
+      viewport,
+    };
+  }
+
+  // Long page: segment into 5-screen parts
+  console.log(`📏 Tall page detected (${actualHeight}px). Splitting into ${Math.ceil(actualHeight / maxSegmentHeight)} parts...`);
+  const actualSegmentCount = Math.ceil(actualHeight / maxSegmentHeight);
+
+  const additionalParts: string[] = [];
+  let primaryScreenshotPath = '';
+  let primaryThumbnailPath = '';
+  let primaryFileSize = 0;
+
+  for (let i = 0; i < actualSegmentCount; i++) {
+    const top = i * maxSegmentHeight;
+    const height = Math.min(maxSegmentHeight, actualHeight - top);
+    const partFilename = filename.replace(/(\.\w+)$/, `-part${i + 1}$1`);
+    const partPath = path.join(outputDir, partFilename);
+
+    const sliceBuffer = await sharp(Buffer.from(fullPageBuffer))
+      .extract({ left: 0, top, width: actualWidth, height })
+      .png()
+      .toBuffer();
+
+    const finalBuffer = await processImageBuffer(sliceBuffer, options);
+    await fs.writeFile(partPath, finalBuffer);
+
+    if (i === 0) {
+      primaryScreenshotPath = partPath;
+      primaryThumbnailPath = await generateThumbnail(finalBuffer, outputDir, partFilename);
+      primaryFileSize = finalBuffer.length;
+    } else {
+      additionalParts.push(partPath);
+    }
+  }
+
+  return {
+    screenshotPath: primaryScreenshotPath,
+    thumbnailPath: primaryThumbnailPath,
+    fileSize: primaryFileSize,
+    title: `${pageTitle} (5-Screen Segmented)`,
+    viewport,
+    additionalParts,
+  };
+}
+
+/**
  * Captures screenshot of a page.
- * If page height exceeds 5 viewport screen heights (5 × viewport.height),
- * automatically splits the long page into 5-screen parts (part1, part2, ...).
+ * Uses Apify Free Tier Cloud if APIFY_API_TOKEN is set, with fallback to local Playwright.
  */
 export async function capturePage(
   url: string,
@@ -107,9 +186,34 @@ export async function capturePage(
   options: CaptureOptions
 ): Promise<CaptureResult> {
   console.log(`📸 Capturing ${url} (${options.deviceType})...`);
-  const browserInstance = await launchBrowser();
   const viewport = VIEWPORTS[options.deviceType] || VIEWPORTS.desktop;
 
+  // 1. Try Apify Cloud if enabled
+  if (isApifyEnabled()) {
+    try {
+      const imageBuffer = await capturePageWithApify(url, {
+        viewport,
+        format: options.format,
+        quality: options.quality,
+        preDelay: options.preDelay,
+        timeout: options.timeout,
+      });
+
+      return await processAndSaveImageBuffer(
+        imageBuffer,
+        url,
+        outputDir,
+        filename,
+        options,
+        viewport
+      );
+    } catch (err: any) {
+      console.warn(`⚠️  Apify capture failed: ${err.message || err}. Falling back to local Playwright...`);
+    }
+  }
+
+  // 2. Fallback to Local Playwright
+  const browserInstance = await launchBrowser();
   const context: BrowserContext = await browserInstance.newContext({
     viewport,
     userAgent: options.deviceType === 'mobile'
@@ -121,130 +225,43 @@ export async function capturePage(
   const page: Page = await context.newPage();
 
   try {
-    // Navigate using domcontentloaded
     await page.goto(url, {
       waitUntil: 'domcontentloaded',
       timeout: options.timeout || 20000,
     });
 
-    // Wait for network idle (max 1s)
     try {
       await page.waitForLoadState('networkidle', { timeout: 1000 });
     } catch { /* ignore */ }
 
-    // Wait for content (max 1.5s)
     await waitForContent(page);
-
-    // Fast auto-scroll to trigger lazy loading
     await autoScroll(page);
 
-    // Scroll back to top
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(200);
 
-    // Optional pre-capture delay (capped at 2s)
     if (options.preDelay > 0) {
       await page.waitForTimeout(Math.min(options.preDelay, 2000));
     }
 
-    // Get page title
     const title = (await page.title()) || 'Untitled Page';
-    await fs.mkdir(outputDir, { recursive: true });
-
-    // Check page height
-    const totalScrollHeight = await page.evaluate(() => Math.max(
-      document.body.scrollHeight,
-      document.documentElement.scrollHeight,
-      window.innerHeight
-    ));
-
-    const maxSegmentHeight = viewport.height * 5; // 5 viewport screen heights
-
-    // If height <= 5 screens, standard full page screenshot
-    if (totalScrollHeight <= maxSegmentHeight) {
-      const screenshotPath = path.join(outputDir, filename);
-      const screenshotBuffer = await page.screenshot({
-        fullPage: true,
-        type: options.format === 'webp' ? 'png' : options.format,
-      });
-
-      const finalBuffer = await processImageBuffer(screenshotBuffer, options);
-      await fs.writeFile(screenshotPath, finalBuffer);
-
-      // Generate thumbnail
-      const thumbnailPath = await generateThumbnail(finalBuffer, outputDir, filename);
-      console.log(`✅ Screenshot saved: ${filename} (${Math.round(finalBuffer.length / 1024)} KB)`);
-
-      return {
-        screenshotPath,
-        thumbnailPath,
-        fileSize: finalBuffer.length,
-        title,
-        viewport,
-      };
-    }
-
-    // --- Page exceeds 5 screens height: Capture full page then slice with Sharp ---
-    // NOTE: Playwright's `clip` only works within the rendered viewport bounds.
-    // For tall pages, yOffset > viewport.height causes "Clipped area is outside image".
-    // Solution: capture the entire page as one PNG buffer, then use Sharp to extract slices.
-    console.log(`📏 Tall page detected (${totalScrollHeight}px). Splitting into ${Math.ceil(totalScrollHeight / maxSegmentHeight)} parts (5 screens each)...`);
-
-    // Always capture as PNG for the intermediate full-page buffer (Sharp will convert after)
     const fullPageBuffer = await page.screenshot({ fullPage: true, type: 'png' });
 
-    // Get actual rendered dimensions from the buffer (more reliable than scrollHeight)
-    const fullMeta = await sharp(Buffer.from(fullPageBuffer)).metadata();
-    const actualWidth = fullMeta.width || viewport.width;
-    const actualHeight = fullMeta.height || totalScrollHeight;
-
-    // Recalculate segments based on the actual captured image height
-    const actualSegmentCount = Math.ceil(actualHeight / maxSegmentHeight);
-
-    const additionalParts: string[] = [];
-    let primaryScreenshotPath = '';
-    let primaryThumbnailPath = '';
-    let primaryFileSize = 0;
-
-    for (let i = 0; i < actualSegmentCount; i++) {
-      const top = i * maxSegmentHeight;
-      const height = Math.min(maxSegmentHeight, actualHeight - top);
-      const partFilename = filename.replace(/(\.\w+)$/, `-part${i + 1}$1`);
-      const partPath = path.join(outputDir, partFilename);
-
-      // Use Sharp extract to crop the slice — operates on image data, no viewport limits
-      const sliceBuffer = await sharp(Buffer.from(fullPageBuffer))
-        .extract({ left: 0, top, width: actualWidth, height })
-        .png()
-        .toBuffer();
-
-      const finalBuffer = await processImageBuffer(sliceBuffer, options);
-      await fs.writeFile(partPath, finalBuffer);
-
-      if (i === 0) {
-        primaryScreenshotPath = partPath;
-        primaryThumbnailPath = await generateThumbnail(finalBuffer, outputDir, partFilename);
-        primaryFileSize = finalBuffer.length;
-      } else {
-        additionalParts.push(partPath);
-      }
-
-      console.log(`  └─ Part ${i + 1}/${actualSegmentCount} saved: ${partFilename}`);
-    }
-
-    return {
-      screenshotPath: primaryScreenshotPath,
-      thumbnailPath: primaryThumbnailPath,
-      fileSize: primaryFileSize,
-      title: `${title} (5-Screen Segmented)`,
+    return await processAndSaveImageBuffer(
+      fullPageBuffer,
+      url,
+      outputDir,
+      filename,
+      options,
       viewport,
-      additionalParts,
-    };
+      title
+    );
   } finally {
     await page.close().catch(() => {});
     await context.close().catch(() => {});
   }
 }
+
 
 /**
  * Process raw buffer with Sharp according to format and quality settings.

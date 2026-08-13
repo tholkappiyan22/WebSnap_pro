@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { crawlWebsite, CrawlOptions, DiscoveredPage } from './crawler.service';
 import { capturePage, CaptureOptions, VIEWPORTS } from './screenshot.service';
 import { createZipArchive, ZipEntry } from './zip.service';
+import { isApifyEnabled } from './apify.service';
 import { generateScreenshotFilename } from '../utils/filename';
 import { getDomain } from '../utils/url';
 import path from 'path';
@@ -83,8 +84,9 @@ class JobService extends EventEmitter {
   constructor() {
     super();
     this.setMaxListeners(100); // Allow many SSE listeners
-    // Increased default from 3→5 for faster throughput
-    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || '5', 10);
+    // Default to 10 parallel cloud captures if Apify is enabled, otherwise 3 local captures
+    const defaultConcurrency = isApifyEnabled() ? '10' : '3';
+    this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_CAPTURES || defaultConcurrency, 10);
   }
 
   /**

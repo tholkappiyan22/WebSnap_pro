@@ -101,9 +101,11 @@ export async function crawlWebsite(
   visited.add(normalizeForDedup(normalizedStart));
   queue.push({ url: normalizedStart, depth: 0 });
 
-  // Try to discover pages from sitemap.xml and robots.txt
-  const sitemapPages = await discoverFromSitemap(startUrl, domain);
-  const robotsPages = await discoverFromRobots(startUrl, domain);
+  // Try to discover pages from sitemap.xml and robots.txt in parallel
+  const [sitemapPages, robotsPages] = await Promise.all([
+    discoverFromSitemap(startUrl, domain),
+    discoverFromRobots(startUrl, domain),
+  ]);
 
   // Add sitemap and robots discoveries to the queue
   for (const sp of sitemapPages) {
