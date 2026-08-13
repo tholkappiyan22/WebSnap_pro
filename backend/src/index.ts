@@ -6,7 +6,9 @@ import scanRoutes from './routes/scan.routes';
 import { apiRateLimiter } from './middleware/rateLimiter';
 
 // Load environment variables
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1);
@@ -14,7 +16,10 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // --- Middleware ---
 app.use(cors({
-  origin: true,
+  origin: (_origin, callback) => {
+    // Allow all origins (Vercel, Render, Localhost)
+    callback(null, true);
+  },
   credentials: true,
 }));
 
