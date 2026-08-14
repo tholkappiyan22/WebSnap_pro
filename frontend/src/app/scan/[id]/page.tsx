@@ -24,6 +24,7 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
   const [scanData, setScanData] = useState<ScanDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
 
   const { progress } = useScanProgress(id);
 
@@ -86,8 +87,6 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
   const currentStatus = progress?.status || scanData?.status || 'pending';
   const isComplete = currentStatus === 'completed';
   const completedPages = scanData?.pages.filter((p) => p.status === 'completed') || [];
-
-  const [isZipping, setIsZipping] = useState(false);
 
   const handleDownloadAll = async (e: React.MouseEvent) => {
     e.preventDefault();
